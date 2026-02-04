@@ -274,7 +274,18 @@ jobs:
     - name: Clone & Apply SUSFS Patches for KernelSU Variants
       run: |
         SUSFS_BRANCH="gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}"
+        echo "========================================" echo "  Cloning SUSFS from GitLab"
+        echo "  Branch: $SUSFS_BRANCH"
+        echo "========================================"
         git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
+        
+        if [ ! -d "susfs4ksu" ]; then
+          echo "✗ SUSFS clone failed!"
+          exit 1
+        fi
+        echo "✓ SUSFS cloned successfully"
+        echo "SUSFS contents:"
+        ls -la susfs4ksu/kernel_patches/
 
         case "${{ inputs.ksu_variant }}" in
           WKSU)
@@ -283,9 +294,24 @@ jobs:
             echo "Nothing to fix for WKSU"
 
             cd "$KERNEL_ROOT/common"
-            cp "$SUSFS4KSU/kernel_patches/fs/"* "$KERNEL_ROOT/common/fs/"
-            cp "$SUSFS4KSU/kernel_patches/include/linux/"* "$KERNEL_ROOT/common/include/linux/"
+            echo "Copying SUSFS files..."
+            echo "  Copying fs files..."
+            cp "$SUSFS4KSU/kernel_patches/fs/"* "$KERNEL_ROOT/common/fs/" || echo "Warning: fs copy failed"
+            echo "  Copying include/linux files..."
+            cp "$SUSFS4KSU/kernel_patches/include/linux/"* "$KERNEL_ROOT/common/include/linux/" || echo "Warning: include/linux copy failed"
+            
+            # Verify susfs.h was copied
+            if [ -f "$KERNEL_ROOT/common/include/linux/susfs.h" ]; then
+              echo "✓ susfs.h copied successfully"
+            else
+              echo "✗ susfs.h NOT found after copy!"
+              echo "Contents of $SUSFS4KSU/kernel_patches/include/linux/:"
+              ls -la "$SUSFS4KSU/kernel_patches/include/linux/" || echo "Directory not found"
+            fi
+            
+            echo "  Copying SUSFS patch..."
             cp $SUSFS4KSU/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./
+            echo "  Applying SUSFS patch..."
             patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
 
             if [[ "${{ inputs.android_version }}" == "android12" && "${{ inputs.kernel_version }}" == "5.10" ]]; then
@@ -577,7 +603,7 @@ jobs:
         cat >> "${{ env.DEFCONFIG }}" << 'EOF'
         # KernelSU Configuration
         CONFIG_KSU=y
-        CONFIG_KSU_SUSFS=y
+        # CONFIG_KSU_SUSFS is not set
 
         # KPatch Next Support
         CONFIG_KALLSYMS=y
