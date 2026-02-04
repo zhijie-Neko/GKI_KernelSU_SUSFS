@@ -130,25 +130,40 @@ jobs:
         git clone https://github.com/WildKernels/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
         rm -rf AnyKernel3/.git
         
-        # Clone original kernel_patches for other patches
+        # Clone original kernel_patches for SUSFS and other patches
         git clone https://github.com/WildKernels/kernel_patches.git kernel_patches_original
         
-        # Copy original patches to kernel_patches directory (if not exists)
-        if [ ! -d "kernel_patches" ]; then
-          cp -r kernel_patches_original kernel_patches
-        fi
+        # Ensure kernel_patches directory exists
+        mkdir -p kernel_patches
         
         # Merge original patches with our Docker/LXC patches
+        # Copy all directories from original EXCEPT docker_lxc (we keep ours)
         if [ -d "kernel_patches_original" ]; then
-          # Copy all directories except docker_lxc from original
+          echo "Merging kernel_patches..."
           for dir in kernel_patches_original/*/; do
             dirname=$(basename "$dir")
-            if [ "$dirname" != "docker_lxc" ] && [ ! -d "kernel_patches/$dirname" ]; then
-              cp -r "$dir" "kernel_patches/"
+            if [ "$dirname" != "docker_lxc" ]; then
+              echo "  Copying $dirname from original..."
+              cp -rf "$dir" "kernel_patches/"
+            else
+              echo "  Skipping docker_lxc (using repository version)"
             fi
           done
-          # Copy root level files
-          cp -n kernel_patches_original/*.patch kernel_patches/ 2>/dev/null || true
+          
+          # Copy root level files from original
+          for file in kernel_patches_original/*.patch; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              if [ ! -f "kernel_patches/$filename" ]; then
+                echo "  Copying $filename..."
+                cp "$file" "kernel_patches/"
+              fi
+            fi
+          done
+          
+          echo "✓ Kernel patches merged successfully"
+          echo "Contents of kernel_patches:"
+          ls -la kernel_patches/
         fi
 
     - name: Initialize and Sync Kernel Source
