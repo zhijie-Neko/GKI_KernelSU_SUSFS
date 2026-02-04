@@ -1,0 +1,113 @@
+name: Build Single Kernel (6.1.118)
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "Release Type"
+        type: choice
+        options: [ Actions, Pre-Release, Release ]
+        default: Actions
+      ksu_variant:
+        description: "KernelSU Variant"
+        type: choice
+        options: [ KSU, WKSU, Next, RKSU]
+        default: WKSU
+      ksu_commit:
+        description: "KSU Commit (optional)"
+        type: string
+        default: ""
+        required: false
+      build_bypass:
+        description: "Build Bypass (同时编译 Normal 和 Bypass 两个版本)"
+        type: boolean
+        default: true
+
+jobs:
+  build-6-1-118:
+    uses: ./.github/workflows/kernel-a14-6-1-single.yml
+    secrets: inherit
+    with:
+      ksu_variant: ${{ inputs.ksu_variant }}
+      ksu_commit: ${{ inputs.ksu_commit }}
+      build_bypass: ${{ inputs.build_bypass }}
+
+  release:
+    runs-on: ubuntu-latest
+    if: ${{ always() && inputs.release_type != 'Actions' }}
+    permissions:
+      contents: write
+    needs: build-6-1-118
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      new_tag: ${{ steps.tag.outputs.new_tag }}
+    steps:
+    - name: Validate Build
+      run: |
+        if [[ "${{ needs.build-6-1-118.result }}" != "success" ]]; then
+          echo "Build failed"
+          exit 1
+        fi
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Generate New Tag
+      id: tag
+      run: |
+        LATEST_TAG=$(gh api repos/${{ github.repository }}/tags --jq '.[0].name' 2>/dev/null || echo "")
+        if [[ "$LATEST_TAG" =~ ^(.*)-r([0-9]+)$ ]]; then
+          VERSION="${BASH_REMATCH[1]}"
+          REV="${BASH_REMATCH[2]}"
+          NEW_REV=$((REV + 1))
+          NEW_TAG="${VERSION}-r${NEW_REV}"
+        else
+          NEW_TAG="${LATEST_TAG}-r1"
+        fi
+        
+        echo "New tag: $NEW_TAG"
+        echo "NEW_TAG=${NEW_TAG}" >> $GITHUB_ENV
+        echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+    - name: Create GitHub Release
+      run: |
+        PRERELEASE_FLAG=""
+        if [ "${{ inputs.release_type }}" == "Pre-Release" ]; then
+          PRERELEASE_FLAG="--prerelease"
+        fi
+
+        echo "Creating release ${{ env.NEW_TAG }}..."
+        gh release create "${{ env.NEW_TAG }}" \
+          --title "Kernel 6.1.118 - Android 14" \
+          --notes "Kernel 6.1.118 for Android 14 with KernelSU & SUSFS" \
+          --target "${{ github.sha }}" \
+          $PRERELEASE_FLAG
+
+    - name: Download Artifacts
+      uses: actions/download-artifact@v5
+      with:
+        path: ./downloaded-artifacts
+        pattern: '*-AnyKernel3'
+
+    - name: Upload Release Assets
+      run: |+
+        shopt -s nullglob
+        mapfile -t anykernel_dirs < <(find ./downloaded-artifacts -maxdepth 2 -type d -name '*-AnyKernel3' -print)
+
+        for dir in "${anykernel_dirs[@]}"; do
+          artifact_name=$(basename "$dir")
+          echo "Creating ZIP for $artifact_name..."
+          (cd "$dir" && zip -r -q -9 "$GITHUB_WORKSPACE/${artifact_name}.zip" ./*) &
+        done
+        wait
+
+        for dir in "${anykernel_dirs[@]}"; do
+          artifact_name=$(basename "$dir")
+          echo "Uploading ${artifact_name}.zip..."
+          gh release upload "${{ env.NEW_TAG }}" "$GITHUB_WORKSPACE/${artifact_name}.zip" --clobber
+        done
