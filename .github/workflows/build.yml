@@ -603,6 +603,7 @@ jobs:
         cat >> "${{ env.DEFCONFIG }}" << 'EOF'
         # KernelSU Configuration
         CONFIG_KSU=y
+        # SUSFS disabled - using official KernelSU without SUSFS
         # CONFIG_KSU_SUSFS is not set
 
         # KPatch Next Support
