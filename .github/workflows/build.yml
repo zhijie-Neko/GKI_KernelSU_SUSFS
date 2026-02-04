@@ -605,7 +605,22 @@ jobs:
       run: |
         echo "Applying Docker & LXC support patches..."
         chmod +x "$KERNEL_PATCHES/docker_lxc/apply_docker_lxc.sh"
-        "$KERNEL_PATCHES/docker_lxc/apply_docker_lxc.sh" "$KERNEL_ROOT" "$KERNEL_PATCHES" "${{ inputs.android_version }}" "${{ inputs.kernel_version }}"
+        
+        # Temporarily disable task_struct patch to avoid bootloop
+        # Only apply cgroup and overlayfs patches
+        cd "$KERNEL_ROOT/common"
+        
+        echo "[1/2] Applying cgroup fix patch..."
+        if [ -f "$KERNEL_PATCHES/docker_lxc/cgroup_fix.patch" ]; then
+          patch -p1 -F 3 < "$KERNEL_PATCHES/docker_lxc/cgroup_fix.patch" || echo "⚠ Cgroup patch may already be applied"
+        fi
+        
+        echo "[2/2] Applying overlayfs fix patch..."
+        if [ -f "$KERNEL_PATCHES/docker_lxc/overlayfs_fix.patch" ]; then
+          patch -p1 -F 3 < "$KERNEL_PATCHES/docker_lxc/overlayfs_fix.patch" || echo "⚠ OverlayFS patch may already be applied"
+        fi
+        
+        echo "✓ Docker & LXC patches applied (task_struct patch disabled for safety)"
 
     - name: Configure Kernel Options
       working-directory: ${{ env.KERNEL_ROOT }}
@@ -687,10 +702,11 @@ jobs:
         CONFIG_NF_NAT_IPV4=y
         CONFIG_NF_NAT_NEEDED=y
         
-        # LXC Specific
-        CONFIG_SYSVIPC=y
-        CONFIG_DETECT_HUNG_TASK=y
-        CONFIG_IO_URING=y
+        # LXC Specific - DISABLED to avoid KMI breakage
+        # These require task_struct modifications which may cause bootloop
+        # CONFIG_SYSVIPC=y
+        # CONFIG_DETECT_HUNG_TASK=y
+        # CONFIG_IO_URING=y
         
         # OverlayFS for Docker
         CONFIG_OVERLAY_FS=y
