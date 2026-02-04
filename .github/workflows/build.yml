@@ -273,8 +273,18 @@ jobs:
 
     - name: Clone & Apply SUSFS Patches for KernelSU Variants
       run: |
+        # Skip SUSFS for official KSU (we're using it without SUSFS for Docker/LXC build)
+        if [ "${{ inputs.ksu_variant }}" == "KSU" ]; then
+          echo "========================================"
+          echo "  Skipping SUSFS for official KSU"
+          echo "  Using KSU without SUSFS for Docker/LXC"
+          echo "========================================"
+          exit 0
+        fi
+        
         SUSFS_BRANCH="gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}"
-        echo "========================================" echo "  Cloning SUSFS from GitLab"
+        echo "========================================" 
+        echo "  Cloning SUSFS from GitLab"
         echo "  Branch: $SUSFS_BRANCH"
         echo "========================================"
         git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
