@@ -85,8 +85,26 @@ jobs:
         rmz_version: "3.1.1"  # Required when rm_cmd is 'rmz'
         testing: false
 
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        path: repo
+
     - name: Setup Build Environment
       run: |
+        # Copy kernel_patches from repository to workspace
+        if [ -d "repo/kernel_patches" ]; then
+          cp -r repo/kernel_patches "$GITHUB_WORKSPACE/"
+          echo "✓ Copied kernel_patches from repository"
+          ls -la "$GITHUB_WORKSPACE/kernel_patches/docker_lxc/" || echo "docker_lxc directory not found"
+        fi
+        
+        # Copy scripts from repository to workspace
+        if [ -d "repo/scripts" ]; then
+          cp -r repo/scripts "$GITHUB_WORKSPACE/"
+          echo "✓ Copied scripts from repository"
+        fi
+        
         CONFIG="${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}"
         KERNEL_ROOT="$GITHUB_WORKSPACE/$CONFIG"
         mkdir -p "$KERNEL_ROOT"
