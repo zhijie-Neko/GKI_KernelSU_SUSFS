@@ -111,7 +111,27 @@ jobs:
         ANYKERNEL_BRANCH="gki-2.0"
         git clone https://github.com/WildKernels/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
         rm -rf AnyKernel3/.git
-        git clone https://github.com/WildKernels/kernel_patches.git
+        
+        # Clone original kernel_patches for other patches
+        git clone https://github.com/WildKernels/kernel_patches.git kernel_patches_original
+        
+        # Copy original patches to kernel_patches directory (if not exists)
+        if [ ! -d "kernel_patches" ]; then
+          cp -r kernel_patches_original kernel_patches
+        fi
+        
+        # Merge original patches with our Docker/LXC patches
+        if [ -d "kernel_patches_original" ]; then
+          # Copy all directories except docker_lxc from original
+          for dir in kernel_patches_original/*/; do
+            dirname=$(basename "$dir")
+            if [ "$dirname" != "docker_lxc" ] && [ ! -d "kernel_patches/$dirname" ]; then
+              cp -r "$dir" "kernel_patches/"
+            fi
+          done
+          # Copy root level files
+          cp -n kernel_patches_original/*.patch kernel_patches/ 2>/dev/null || true
+        fi
 
     - name: Initialize and Sync Kernel Source
       working-directory: ${{ env.KERNEL_ROOT }}
